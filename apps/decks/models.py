@@ -99,9 +99,19 @@ class Card(BaseModel):
         TYPE_PENALTY: {"move": -2, "points": 0},
     }
 
+    CARD_TONE_POSITIVE = "positive"
+    CARD_TONE_NEGATIVE = "negative"
+    CARD_TONE_CHOICES = [
+        (CARD_TONE_POSITIVE, "Positive"),
+        (CARD_TONE_NEGATIVE, "Negative"),
+    ]
+
     deck = models.ForeignKey(Deck, on_delete=models.CASCADE, related_name="cards")
     type = models.CharField(max_length=16, choices=TYPE_CHOICES)
     rarity = models.CharField(max_length=16, choices=RARITY_CHOICES, default="common")
+    card_tone = models.CharField(
+        max_length=10, choices=CARD_TONE_CHOICES, default=CARD_TONE_POSITIVE
+    )
     title = models.CharField(max_length=120)
     prompt = models.TextField()
     reference = models.CharField(max_length=80, blank=True, default="")

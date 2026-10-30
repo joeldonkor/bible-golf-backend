@@ -1,11 +1,13 @@
 """
 The authoritative rules of Bible Golf.
 
-This is the server-side twin of the client's `src/services/sessions/gameEngine.ts`,
-with one deliberate difference: the client's mock hands every turn back to the
-local human and simulates opponents, whereas here the turn genuinely rotates
-between real players. The client already gates its "Take Swing" button on
-`activePlayerId`, so that difference needs no UI change.
+Two-phase game:
+  Phase 1 — Growth Ladder: players must roll exactly LADDER_ROLL_TO_ENTER (6)
+             to advance one step. After LADDER_STEPS (7) steps the player enters
+             the main board. No cards are drawn during this phase.
+  Phase 2 — Main Board: any roll moves the player that many spaces (1-68).
+             Odd positions draw a positive card; even positions draw a negative
+             card. First to reach TOTAL_SPACES (68) wins.
 
 Every function assumes the caller holds a row lock on the session (see
 `apps.common.db.locked`) -- these are read-modify-write sequences, and without
@@ -14,6 +16,7 @@ and one update would vanish.
 """
 
 import logging
+import random
 import secrets
 from dataclasses import dataclass
 
@@ -29,13 +32,20 @@ from .models import GameEvent, GameSession, Player
 logger = logging.getLogger(__name__)
 
 
-# --------------------------------------------------------------------------- #
-# Scoring constants -- golf terms, so lower is better.
-# --------------------------------------------------------------------------- #
+def _get_tile_tone(position: int) -> str:
+    """Odd positions are positive tiles; even positions are negative tiles."""
+    return Card.CARD_TONE_POSITIVE if position % 2 == 1 else Card.CARD_TONE_NEGATIVE
 
-STROKE = 1  # every swing costs a stroke
-BIRDIE = -1  # a correct answer takes one back
-BOGEY = 1  # a wrong answer costs another
+
+def _draw_card_by_tone(session: GameSession, tone: str) -> Card | None:
+    """Draw a random card matching the given tone from the session's deck."""
+    pool = list(session.deck.cards.filter(is_active=True, card_tone=tone))
+    if not pool:
+        # Fallback: any active card from the deck.
+        pool = list(session.deck.cards.filter(is_active=True))
+    if not pool:
+        return None
+    return random.choice(pool)
 
 
 @dataclass(frozen=True)
@@ -159,7 +169,7 @@ def start_session(*, session: GameSession, user) -> GameSession:
         raise DomainError("A round needs at least one player.")
 
     session.status = GameSession.STATUS_ACTIVE
-    session.stage = GameSession.STAGE_MAIN_JOURNEY
+    session.stage = GameSession.STAGE_GROWTH_LADDER
     session.turn_number = 1
     session.active_player = players[0]
     session.started_at = timezone.now()
@@ -175,7 +185,8 @@ def start_session(*, session: GameSession, user) -> GameSession:
             "updated_at",
         ]
     )
-    session.players.update(has_entered_main_board=True)
+    # All players start on the ladder, position 0.
+    session.players.update(has_entered_main_board=False, ladder_position=0, position=0)
 
     record_event(
         session,
@@ -253,21 +264,6 @@ def _require_turn(session: GameSession, user) -> Player:
     return player
 
 
-def _draw_card(session: GameSession, player: Player) -> Card | None:
-    """
-    Draw from the session's deck.
-
-    Cards a player added to a built-in deck stay private to them, so the pool is
-    the stock cards plus the drawing player's own.
-    """
-    pool = Card.objects.filter(deck_id=session.deck_id).playable().visible_to(player.user)
-    # `ORDER BY RANDOM()` scans the whole pool; picking an offset costs one
-    # cheap COUNT and one indexed fetch, which stays flat as decks grow.
-    total = pool.count()
-    if total == 0:
-        return None
-    return pool.order_by("created_at", "id")[secrets.randbelow(total)]
-
 
 def _next_seat(session: GameSession, from_order: int, seats: list[Player]) -> Player | None:
     """
@@ -305,7 +301,7 @@ def _advance_turn(session: GameSession, *, leaving_player_order: int | None = No
 
     nxt = _next_seat(session, from_order, seats)
     if nxt is None:
-        _complete(session, winner=max(seats, key=lambda p: (p.position, -p.score)))
+        _complete(session)
         return
 
     session.active_player = nxt
@@ -313,7 +309,12 @@ def _advance_turn(session: GameSession, *, leaving_player_order: int | None = No
     session.turn_started_at = timezone.now()
 
 
-def _complete(session: GameSession, *, winner: Player | None) -> None:
+def _complete(session: GameSession) -> None:
+    # Winner = first player who reached TOTAL_SPACES; fallback = furthest along.
+    finished = session.players.filter(
+        position__gte=settings.TOTAL_SPACES
+    ).order_by("turn_order").first()
+    winner = finished or session.players.order_by("-position", "turn_order").first()
     session.status = GameSession.STATUS_COMPLETED
     session.completed_at = timezone.now()
     session.winner = winner
@@ -324,10 +325,13 @@ def _complete(session: GameSession, *, winner: Player | None) -> None:
 
 def take_swing(*, session: GameSession, user) -> TurnOutcome:
     """
-    Roll, move, and draw -- the "Take Swing" action.
+    Roll the die and advance the player.
 
-    Mirrors the client mock: a swing always costs a stroke, reaching the last
-    hole wins immediately, and anything short of it draws a card to resolve.
+    Ladder phase: only a roll of LADDER_ROLL_TO_ENTER (6) moves the player one
+    step up the ladder. Any other roll passes the turn with no movement.
+
+    Main board phase: any roll moves the player that many spaces. Landing on an
+    odd position draws a positive card; even draws a negative card.
     """
     player = _require_turn(session, user)
     if session.pending_card_id is not None:
@@ -336,39 +340,67 @@ def take_swing(*, session: GameSession, user) -> TurnOutcome:
         raise DomainError("You've already finished the course.")
 
     value = roll_die()
-    player.score += STROKE
-    player.position = min(settings.TOTAL_HOLES, player.position + value)
-    player.has_entered_main_board = True
-    player.last_seen_at = timezone.now()
-    player.save(
-        update_fields=[
-            "score",
-            "position",
-            "has_entered_main_board",
-            "last_seen_at",
-            "updated_at",
-        ]
-    )
-
     session.last_roll = value
+
+    # ------------------------------------------------------------------ #
+    # LADDER PHASE
+    # ------------------------------------------------------------------ #
+    if not player.has_entered_main_board:
+        moved = value == settings.LADDER_ROLL_TO_ENTER
+        if moved:
+            player.ladder_position = min(settings.LADDER_STEPS, player.ladder_position + 1)
+            if player.ladder_position >= settings.LADDER_STEPS:
+                player.has_entered_main_board = True
+                # Switch stage once the first player steps onto the board.
+                if session.stage == GameSession.STAGE_GROWTH_LADDER:
+                    session.stage = GameSession.STAGE_MAIN_JOURNEY
+        player.last_seen_at = timezone.now()
+        player.save(
+            update_fields=[
+                "ladder_position",
+                "has_entered_main_board",
+                "last_seen_at",
+                "updated_at",
+            ]
+        )
+        session.save(update_fields=["last_roll", "stage", "updated_at"])
+        _advance_turn(session)
+        session.save(update_fields=["active_player", "turn_number", "turn_started_at", "updated_at"])
+        payload = {
+            "value": value,
+            "phase": "ladder",
+            "ladder_position": player.ladder_position,
+            "moved": moved,
+        }
+        record_event(session, GameEvent.TYPE_ROLLED, payload, actor=player)
+        return TurnOutcome(session=session, event_type=GameEvent.TYPE_ROLLED, payload=payload)
+
+    # ------------------------------------------------------------------ #
+    # MAIN BOARD PHASE
+    # ------------------------------------------------------------------ #
+    new_pos = min(settings.TOTAL_SPACES, player.position + value)
+    player.position = new_pos
+    player.last_seen_at = timezone.now()
+    player.save(update_fields=["position", "last_seen_at", "updated_at"])
 
     drawn: Card | None = None
     if player.has_finished:
-        _complete(session, winner=player)
+        _complete(session)
+        session.save()
     else:
-        drawn = _draw_card(session, player)
+        tone = _get_tile_tone(new_pos)
+        drawn = _draw_card_by_tone(session, tone)
         session.pending_card = drawn
         if drawn is None:
-            # An empty deck shouldn't strand the table on a phantom card.
             _advance_turn(session)
         else:
             session.turn_started_at = timezone.now()
-
-    session.save()
+        session.save()
 
     payload = {
         "value": value,
-        "position": player.position,
+        "phase": "board",
+        "position": new_pos,
         "card_id": str(drawn.id) if drawn else None,
     }
     record_event(session, GameEvent.TYPE_ROLLED, payload, actor=player)
@@ -379,8 +411,8 @@ def resolve_card(*, session: GameSession, user, choice_index: int | None) -> Tur
     """
     Settle the pending card and pass the turn on.
 
-    A question answered right is a birdie, wrong is a bogey, and declining to
-    answer ("Use Life" in the card modal, which sends no choice) is par.
+    For question cards a correct answer earns XP; wrong or skipped ("Use Life")
+    earns nothing. Win condition is position-only -- not score-based.
     """
     player = _require_turn(session, user)
     card = session.pending_card
@@ -390,25 +422,21 @@ def resolve_card(*, session: GameSession, user, choice_index: int | None) -> Tur
     correct: bool | None = None
     awarded = 0
 
-    # `correct` stays None when the card isn't a question or the player passed
-    # on it -- which is what keeps "Use Life" scoring par rather than a bogey.
     if (
         card.type == Card.TYPE_QUESTION
         and card.correct_option_index is not None
         and choice_index is not None
     ):
         correct = choice_index == card.correct_option_index
-        player.score += BIRDIE if correct else BOGEY
 
     effect = card.effect or {}
     move = int(effect.get("move") or 0)
     if move:
-        player.position = max(0, min(settings.TOTAL_HOLES, player.position + move))
+        player.position = max(1, min(settings.TOTAL_SPACES, player.position + move))
     if effect.get("skip_turn"):
         player.skip_next_turn = True
 
-    # Points are the reward for engaging: automatic on scripture and challenge
-    # cards, earned on a question only by answering it right.
+    # Award XP/points for engaging: automatic on most cards, questions only on correct.
     points = int(effect.get("points") or 0)
     if points and correct is not False:
         awarded = points
@@ -417,7 +445,6 @@ def resolve_card(*, session: GameSession, user, choice_index: int | None) -> Tur
     player.last_seen_at = timezone.now()
     player.save(
         update_fields=[
-            "score",
             "position",
             "skip_next_turn",
             "last_seen_at",
@@ -428,7 +455,7 @@ def resolve_card(*, session: GameSession, user, choice_index: int | None) -> Tur
     session.pending_card = None
 
     if player.has_finished:
-        _complete(session, winner=player)
+        _complete(session)
     else:
         _advance_turn(session)
     session.save()

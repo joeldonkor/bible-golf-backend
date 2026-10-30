@@ -278,7 +278,7 @@ def test_reaching_the_last_hole_ends_the_round(table, host, guest, settings):
 
     # Park the active player one short of the pin so the next swing must finish.
     mover = Player.objects.get(pk=state_of(host_client, session_id)["activePlayerId"])
-    mover.position = settings.TOTAL_HOLES - 1
+    mover.position = settings.TOTAL_SPACES - 1
     mover.save(update_fields=["position"])
 
     after = client.post(f"/api/sessions/{session_id}/roll/", format="json").json()
@@ -287,7 +287,7 @@ def test_reaching_the_last_hole_ends_the_round(table, host, guest, settings):
     assert after["activePlayerId"] is None
     assert after["pendingCard"] is None
     winner = next(p for p in after["players"] if p["id"] == str(mover.id))
-    assert winner["position"] == settings.TOTAL_HOLES
+    assert winner["position"] == settings.TOTAL_SPACES
 
     # And the table is closed for business.
     assert client.post(f"/api/sessions/{session_id}/roll/", format="json").status_code == 422
@@ -297,7 +297,7 @@ def test_a_finished_round_stops_being_the_active_one(table, host, guest, setting
     session_id, host_client, guest_client = table
     client = active_client(session_id, host_client, guest_client, host, guest)
     mover = Player.objects.get(pk=state_of(host_client, session_id)["activePlayerId"])
-    mover.position = settings.TOTAL_HOLES - 1
+    mover.position = settings.TOTAL_SPACES - 1
     mover.save(update_fields=["position"])
     client.post(f"/api/sessions/{session_id}/roll/", format="json")
 

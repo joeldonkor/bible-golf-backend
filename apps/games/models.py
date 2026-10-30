@@ -143,7 +143,8 @@ class Player(BaseModel):
 
     turn_order = models.PositiveSmallIntegerField()
     position = models.PositiveSmallIntegerField(default=0)
-    # Golf scoring: strokes relative to par, so it can legitimately go negative.
+    ladder_position = models.PositiveSmallIntegerField(default=0)
+    # Golf scoring retained for leaderboard/XP display; not used for win condition.
     score = models.SmallIntegerField(default=0)
     is_host = models.BooleanField(default=False)
     has_entered_main_board = models.BooleanField(default=False)
@@ -175,7 +176,7 @@ class Player(BaseModel):
 
     @property
     def has_finished(self) -> bool:
-        return self.position >= settings.TOTAL_HOLES
+        return self.position >= settings.TOTAL_SPACES
 
 
 class GameEvent(models.Model):

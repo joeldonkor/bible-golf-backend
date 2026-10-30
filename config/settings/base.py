@@ -246,8 +246,9 @@ MAX_CARD_ART_BYTES = env.int("MAX_CARD_ART_BYTES", default=5 * 1024 * 1024)
 # Game rules (must mirror the client's `src/constants/game.ts`)
 # --------------------------------------------------------------------------- #
 
-TOTAL_HOLES = env.int("GAME_TOTAL_HOLES", default=18)
-PAR_PER_HOLE = env.int("GAME_PAR_PER_HOLE", default=1)
+TOTAL_SPACES = env.int("GAME_TOTAL_SPACES", default=68)
+LADDER_STEPS = env.int("GAME_LADDER_STEPS", default=7)
+LADDER_ROLL_TO_ENTER = env.int("GAME_LADDER_ROLL", default=6)
 DIE_SIDES = env.int("GAME_DIE_SIDES", default=6)
 # How long a player may sit on their turn before anyone can skip them.
 TURN_TIMEOUT_SECONDS = env.int("GAME_TURN_TIMEOUT_SECONDS", default=90)

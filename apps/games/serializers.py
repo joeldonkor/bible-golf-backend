@@ -32,6 +32,7 @@ class PlayerSerializer(serializers.ModelSerializer):
             "avatar_url",
             "level",
             "position",
+            "ladder_position",
             "score",
             "is_host",
             "is_connected",

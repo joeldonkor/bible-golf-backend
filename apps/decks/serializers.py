@@ -49,6 +49,7 @@ class CardSerializer(serializers.ModelSerializer):
             "deck_id",
             "type",
             "rarity",
+            "card_tone",
             "title",
             "prompt",
             "reference",

@@ -214,7 +214,7 @@ def test_finishing_a_round_awards_the_win_badge(table, host, guest, settings):
     mover = Player.objects.select_related("user").get(pk=state["activePlayerId"])
     client = host_client if mover.user_id == host.id else guest_client
 
-    mover.position = settings.TOTAL_HOLES - 1
+    mover.position = settings.TOTAL_SPACES - 1
     mover.save(update_fields=["position"])
     client.post(f"/api/sessions/{session_id}/roll/", format="json")
 
