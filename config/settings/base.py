@@ -74,7 +74,7 @@ ASGI_APPLICATION = "config.asgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -281,6 +281,18 @@ LOGGING = {
         "apps": {"level": LOG_LEVEL, "propagate": True},
     },
 }
+
+# --------------------------------------------------------------------------- #
+# Email (Brevo SMTP)
+# --------------------------------------------------------------------------- #
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = env("BREVO_SMTP_HOST", default="smtp-relay.brevo.com")
+EMAIL_PORT = env.int("BREVO_EMAIL_PORT", default=587)
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = env("BREVO_SMTP_LOGIN", default="")
+EMAIL_HOST_PASSWORD = env("BREVO_SMTP_KEY", default="")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Bible Golf <noreply@biblegolf.app>")
 
 # --------------------------------------------------------------------------- #
 # Security defaults (tightened further in prod.py)

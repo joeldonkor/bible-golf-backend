@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -15,6 +16,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import (
     AuthSessionSerializer,
     LoginSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     ProfileUpdateSerializer,
     RegisterSerializer,
     UserSerializer,
@@ -110,4 +113,30 @@ class LogoutView(GenericAPIView):
             "user_logged_out",
             extra={"user_id": str(request.user.id), "revoked": revoked},
         )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordResetRequestView(APIView):
+    """`POST /api/auth/password-reset/` — sends a reset email; always 204."""
+
+    permission_classes = (AllowAny,)
+    throttle_scope = "auth"
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordResetConfirmView(APIView):
+    """`POST /api/auth/password-reset/confirm/` — validates token and sets new password."""
+
+    permission_classes = (AllowAny,)
+    throttle_scope = "auth"
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
