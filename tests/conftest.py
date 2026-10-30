@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
 from apps.decks.models import Card, Deck
+from apps.games.models import GameSession
 
 User = get_user_model()
 
@@ -99,5 +100,11 @@ def table(auth, host, guest, deck):
 
     started = host_client.post(f"/api/sessions/{session_id}/start/", format="json")
     assert started.status_code == 200, started.data
+
+    # Bypass the growth-ladder phase so board tests don't have to roll sixes.
+    session = GameSession.objects.get(pk=session_id)
+    session.stage = GameSession.STAGE_MAIN_JOURNEY
+    session.save(update_fields=["stage", "updated_at"])
+    session.players.update(has_entered_main_board=True, ladder_position=7)
 
     return session_id, host_client, guest_client
