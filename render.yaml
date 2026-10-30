@@ -12,6 +12,11 @@
 #   5. Set any secrets Render marked "needs value" in the dashboard env UI.
 
 services:
+  - type: redis
+    name: bible-golf-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+
   - type: web
     name: bible-golf-backend
     env: docker
@@ -20,7 +25,7 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     # Runs after the new image is built, before traffic is switched over.
-    releaseCommand: "python manage.py migrate --noinput && python manage.py seed_content"
+    preDeployCommand: "python manage.py migrate --noinput && python manage.py seed_content"
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod
@@ -82,8 +87,3 @@ databases:
     plan: starter
     databaseName: biblegolf
     user: biblegolf
-
-  - name: bible-golf-redis
-    type: redis
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
