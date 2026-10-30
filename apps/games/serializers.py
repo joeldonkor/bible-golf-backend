@@ -37,6 +37,7 @@ class PlayerSerializer(serializers.ModelSerializer):
             "is_host",
             "is_connected",
             "has_entered_main_board",
+            "skip_next_obstacle",
         )
         read_only_fields = fields
 

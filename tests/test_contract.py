@@ -40,10 +40,12 @@ PLAYER_KEYS = {
     "avatarUrl",
     "level",
     "position",
+    "ladderPosition",
     "score",
     "isHost",
     "isConnected",
     "hasEnteredMainBoard",
+    "skipNextObstacle",
 }
 
 SESSION_KEYS = {
@@ -78,6 +80,7 @@ CARD_KEYS = {
     "deckId",
     "type",
     "rarity",
+    "cardTone",
     "title",
     "prompt",
     "reference",
@@ -157,7 +160,7 @@ def test_deck_cards_shape(auth, host, deck):
     card = body(response)["results"][0]
     assert set(card) == CARD_KEYS
     # Effect keys reach the client camelised, matching `CardEffect`.
-    assert set(card["effect"]) <= {"move", "points", "skipTurn"}
+    assert set(card["effect"]) <= {"move", "points", "skipTurn", "skipObstacle"}
 
 
 def test_session_and_state_shape(table):

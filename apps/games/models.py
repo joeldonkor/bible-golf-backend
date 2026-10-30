@@ -149,6 +149,7 @@ class Player(BaseModel):
     is_host = models.BooleanField(default=False)
     has_entered_main_board = models.BooleanField(default=False)
     skip_next_turn = models.BooleanField(default=False)
+    skip_next_obstacle = models.PositiveSmallIntegerField(default=0)
 
     # Sockets held open by this player. A phone that backgrounds and resumes
     # briefly holds two, so presence is a count rather than a boolean.

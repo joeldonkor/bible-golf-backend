@@ -389,7 +389,13 @@ def take_swing(*, session: GameSession, user) -> TurnOutcome:
         session.save()
     else:
         tone = _get_tile_tone(new_pos)
-        drawn = _draw_card_by_tone(session, tone)
+        # Burn a shield charge instead of drawing a negative card.
+        if tone == Card.CARD_TONE_NEGATIVE and player.skip_next_obstacle > 0:
+            player.skip_next_obstacle -= 1
+            player.save(update_fields=["skip_next_obstacle", "last_seen_at", "updated_at"])
+            drawn = None
+        else:
+            drawn = _draw_card_by_tone(session, tone)
         session.pending_card = drawn
         if drawn is None:
             _advance_turn(session)
@@ -435,6 +441,9 @@ def resolve_card(*, session: GameSession, user, choice_index: int | None) -> Tur
         player.position = max(1, min(settings.TOTAL_SPACES, player.position + move))
     if effect.get("skip_turn"):
         player.skip_next_turn = True
+    skip_obstacle = int(effect.get("skip_obstacle") or 0)
+    if skip_obstacle:
+        player.skip_next_obstacle = min(10, player.skip_next_obstacle + skip_obstacle)
 
     # Award XP/points for engaging: automatic on most cards, questions only on correct.
     points = int(effect.get("points") or 0)
@@ -447,6 +456,7 @@ def resolve_card(*, session: GameSession, user, choice_index: int | None) -> Tur
         update_fields=[
             "position",
             "skip_next_turn",
+            "skip_next_obstacle",
             "last_seen_at",
             "updated_at",
         ]
