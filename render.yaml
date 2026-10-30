@@ -1,0 +1,87 @@
+# Render blueprint — deploys the full Bible Golf backend stack.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# First-time setup:
+#   1. Push this repo to GitHub.
+#   2. In Render Dashboard → New → Blueprint, point at this repo.
+#   3. Render will provision the database, Redis, and the web service in order.
+#   4. After the first deploy completes, copy the web service URL
+#      (e.g. https://bible-golf-backend.onrender.com) and update:
+#        - eas.json  → build.production.env.EXPO_PUBLIC_API_URL
+#        - This file → services[0].envVars DJANGO_ALLOWED_HOSTS / PUBLIC_BASE_URL
+#   5. Set any secrets Render marked "needs value" in the dashboard env UI.
+
+services:
+  - type: web
+    name: bible-golf-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+
+      # Render generates this on first deploy — no action needed.
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+
+      # Update to your actual Render URL (or custom domain) after first deploy.
+      - key: DJANGO_ALLOWED_HOSTS
+        value: bible-golf-backend.onrender.com
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bible-golf-db
+          property: connectionString
+
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: bible-golf-redis
+          property: connectionString
+
+      - key: USE_REDIS
+        value: "true"
+
+      # Render generates this on first deploy — set it independently so rotating
+      # DJANGO_SECRET_KEY doesn't invalidate all active sessions.
+      - key: JWT_SIGNING_KEY
+        generateValue: true
+
+      - key: JWT_ACCESS_MINUTES
+        value: "30"
+
+      - key: JWT_REFRESH_DAYS
+        value: "30"
+
+      # React Native sends no Origin; set to false and list origins explicitly
+      # once you have a web build URL.
+      - key: CORS_ALLOW_ALL_ORIGINS
+        value: "false"
+
+      # Update after first deploy.
+      - key: PUBLIC_BASE_URL
+        value: https://bible-golf-backend.onrender.com
+
+      - key: MEDIA_URL
+        value: /media/
+
+      - key: DJANGO_LOG_FORMAT
+        value: json
+
+      # Optional — set in the Render dashboard once you have a Sentry project.
+      # - key: SENTRY_DSN
+      #   sync: false
+
+databases:
+  - name: bible-golf-db
+    plan: starter
+    databaseName: biblegolf
+    user: biblegolf
+
+  - name: bible-golf-redis
+    type: redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru

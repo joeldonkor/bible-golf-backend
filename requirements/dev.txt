@@ -1,0 +1,10 @@
+-r base.txt
+
+pytest==8.4.2
+pytest-django==4.11.1
+pytest-asyncio==1.2.0
+pytest-cov==7.0.0
+# `channels.testing` imports the live-server helper, which needs daphne even
+# though the app is served with uvicorn.
+daphne==4.2.1
+ruff==0.14.2

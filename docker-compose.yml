@@ -1,0 +1,73 @@
+# Local stack that matches production: PostgreSQL for the data, Redis for the
+# channel layer. Two API replicas are deliberate -- they prove a move made on
+# one process reaches a socket held by the other, which is the whole reason
+# realtime goes through Redis rather than process memory.
+#
+#   docker compose up --build
+#   docker compose exec api python manage.py migrate
+#   docker compose exec api python manage.py seed_content
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: biblegolf
+      POSTGRES_USER: biblegolf
+      POSTGRES_PASSWORD: biblegolf
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biblegolf"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "no", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_SECRET_KEY: local-compose-secret-key-at-least-32-characters-long
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,api,nginx
+      DJANGO_LOG_FORMAT: json
+      DATABASE_URL: postgres://biblegolf:biblegolf@db:5432/biblegolf
+      REDIS_URL: redis://redis:6379/0
+      SECURE_SSL_REDIRECT: "false"
+      SECURE_HSTS_SECONDS: "0"
+      CORS_ALLOW_ALL_ORIGINS: "true"
+      PUBLIC_BASE_URL: http://localhost:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    volumes:
+      - media:/app/media
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - media:/var/www/media:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  media:

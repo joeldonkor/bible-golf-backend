@@ -1,0 +1,24 @@
+# Core runtime — identical across every environment.
+Django==6.1.1
+djangorestframework==3.18.1
+djangorestframework-simplejwt==5.5.1
+djangorestframework-camel-case==1.4.2
+django-cors-headers==4.9.0
+django-environ==0.12.0
+drf-spectacular==0.28.0
+
+# Realtime (ASGI websockets).
+channels==4.3.2
+channels-redis==4.3.0
+
+# Caching / locks / channel layer backend.
+redis==7.0.0
+django-redis==6.0.0
+
+# Card-art uploads are verified by decoding them, not by trusting the
+# Content-Type header the client sent.
+pillow==12.1.0
+
+# Serving.
+uvicorn[standard]==0.41.0
+whitenoise==6.11.0
