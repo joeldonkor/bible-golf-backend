@@ -19,6 +19,8 @@ services:
     plan: starter
     healthCheckPath: /healthz
     autoDeploy: true
+    # Runs after the new image is built, before traffic is switched over.
+    releaseCommand: "python manage.py migrate --noinput && python manage.py seed_content"
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod
