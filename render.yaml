@@ -12,17 +12,11 @@
 #   5. Set any secrets Render marked "needs value" in the dashboard env UI.
 
 services:
-  - type: redis
-    name: bible-golf-redis
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []
-
   - type: web
     name: bible-golf-backend
     env: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    plan: free
     healthCheckPath: /healthz
     autoDeploy: true
     # Runs after the new image is built, before traffic is switched over.
@@ -40,15 +34,10 @@ services:
         value: bible-golf-backend.onrender.com
 
       - key: DATABASE_URL
-        fromDatabase:
-          name: bible-golf-db
-          property: connectionString
+        sync: false
 
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: bible-golf-redis
-          property: connectionString
+        sync: false
 
       - key: USE_REDIS
         value: "true"
@@ -83,8 +72,3 @@ services:
       # - key: SENTRY_DSN
       #   sync: false
 
-databases:
-  - name: bible-golf-db
-    plan: starter
-    databaseName: biblegolf
-    user: biblegolf
