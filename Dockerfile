@@ -50,22 +50,13 @@ RUN DJANGO_SECRET_KEY=build-only-key-that-is-long-enough-for-the-check-012345678
     python manage.py collectstatic --noinput \
     && rm -f build.sqlite3
 
+COPY --chown=app:app entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/healthz || exit 1
 
-# Uvicorn workers under gunicorn: gunicorn supervises and recycles processes,
-# uvicorn speaks ASGI so the same workers serve HTTP and websockets. Long-lived
-# sockets mean no request timeout and a generous graceful shutdown.
-CMD ["gunicorn", "config.asgi:application", \
-     "--worker-class", "uvicorn_worker.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "4", \
-     "--timeout", "0", \
-     "--graceful-timeout", "30", \
-     "--max-requests", "10000", \
-     "--max-requests-jitter", "1000", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD ["/entrypoint.sh"]
