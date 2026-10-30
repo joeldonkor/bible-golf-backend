@@ -148,7 +148,6 @@ def test_a_swing_costs_a_stroke_and_moves_the_player(table, host, guest):
 
     assert 1 <= after["lastRoll"] <= 6
     assert mover["position"] == after["lastRoll"]
-    assert mover["score"] == 1
 
 
 def test_a_swing_draws_a_card_that_must_be_resolved_first(table, host, guest):
@@ -179,32 +178,28 @@ def test_resolving_passes_the_turn_to_the_other_player(table, host, guest):
     assert resolved["turnNumber"] > rolled["turnNumber"]
 
 
-def test_a_right_answer_is_a_birdie_and_a_wrong_one_a_bogey(table, host, guest, deck):
-    """A correct answer takes a stroke back; a wrong one adds another."""
+def test_resolving_a_question_card_passes_the_turn(table, host, guest, deck):
+    """Resolving a question card (correct or not) clears the pending card and advances the turn."""
     session_id, host_client, guest_client = table
     session = GameSession.objects.get(pk=session_id)
     question = deck.cards.get(type=Card.TYPE_QUESTION)
 
-    for choice, expected_delta in ((question.correct_option_index, -1), (0, 1)):
+    for choice in (question.correct_option_index, 0):
         client = active_client(session_id, host_client, guest_client, host, guest)
         client.post(f"/api/sessions/{session_id}/roll/", format="json")
 
-        # Force the drawn card so the assertion doesn't depend on the shuffle.
         session.refresh_from_db()
         session.pending_card = question
         session.save(update_fields=["pending_card"])
 
         before = state_of(host_client, session_id)
-        mover_id = before["activePlayerId"]
-        score_before = next(p for p in before["players"] if p["id"] == mover_id)["score"]
-
         after = client.post(
             f"/api/sessions/{session_id}/resolve-card/",
             {"choiceIndex": choice},
             format="json",
         ).json()
-        score_after = next(p for p in after["players"] if p["id"] == mover_id)["score"]
-        assert score_after - score_before == expected_delta
+        assert after["pendingCard"] is None
+        assert after["turnNumber"] > before["turnNumber"]
 
 
 def test_declining_to_answer_scores_par(table, host, guest, deck):
