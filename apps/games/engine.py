@@ -264,7 +264,6 @@ def _require_turn(session: GameSession, user) -> Player:
     return player
 
 
-
 def _next_seat(session: GameSession, from_order: int, seats: list[Player]) -> Player | None:
     """
     The next seat that still has holes to play, consuming any skip along the way.
@@ -311,9 +310,11 @@ def _advance_turn(session: GameSession, *, leaving_player_order: int | None = No
 
 def _complete(session: GameSession) -> None:
     # Winner = first player who reached TOTAL_SPACES; fallback = furthest along.
-    finished = session.players.filter(
-        position__gte=settings.TOTAL_SPACES
-    ).order_by("turn_order").first()
+    finished = (
+        session.players.filter(position__gte=settings.TOTAL_SPACES)
+        .order_by("turn_order")
+        .first()
+    )
     winner = finished or session.players.order_by("-position", "turn_order").first()
     session.status = GameSession.STATUS_COMPLETED
     session.completed_at = timezone.now()
@@ -365,7 +366,9 @@ def take_swing(*, session: GameSession, user) -> TurnOutcome:
         )
         session.save(update_fields=["last_roll", "stage", "updated_at"])
         _advance_turn(session)
-        session.save(update_fields=["active_player", "turn_number", "turn_started_at", "updated_at"])
+        session.save(
+            update_fields=["active_player", "turn_number", "turn_started_at", "updated_at"]
+        )
         payload = {
             "value": value,
             "phase": "ladder",
