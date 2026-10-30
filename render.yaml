@@ -16,6 +16,7 @@ services:
     name: bible-golf-redis
     plan: starter
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
 
   - type: web
     name: bible-golf-backend
